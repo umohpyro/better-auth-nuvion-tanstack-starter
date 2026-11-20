@@ -1,0 +1,9 @@
+node_modules
+dist
+.output
+.env*
+!.env.example
+*.db
+.vercel
+.tanstack
+*.tsbuildinfo

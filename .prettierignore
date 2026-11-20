@@ -1,0 +1,6 @@
+dist
+.output
+node_modules
+package-lock.json
+src/routeTree.gen.ts
+*.tsbuildinfo

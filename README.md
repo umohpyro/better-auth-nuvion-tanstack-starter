@@ -29,7 +29,7 @@ npm run dev
 
 Using pnpm, yarn or bun? Swap `npm install` for `pnpm install`, `yarn` or `bun install`, and `npm run <script>` for `pnpm <script>`, `yarn <script>` or `bun run <script>`.
 
-1. Create a webhook in Nuvion pointing at `https://<your-https-host>/api/auth/nuvion/webhook` (Nuvion only delivers to https, so use a deployed app or a tunnel) and put its signing secret in `NUVION_WEBHOOK_SECRET`.
+1. Create a webhook in Nuvion pointing at `https://<your-https-host>/api/auth/nuvion/webhook` (Nuvion only delivers to https, so use a deployed app or a tunnel) and put its signing secret in `NUVION_WEBHOOK_SECRET`. Or call `authClient.nuvion.registerWebhook({ organizationId })` once the organization is bound: it registers the webhook with every event the plugin needs and returns the secret once.
 2. Open the app, sign up, enter a shop name and your entity and account ids, press **Connect**.
 3. Press **Pay £1.00**, pay in the hosted checkout, come back. The payment goes `pending`, then `received` and `settled` as Nuvion's signed webhooks arrive.
 

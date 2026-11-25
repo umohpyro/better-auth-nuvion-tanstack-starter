@@ -27,6 +27,17 @@ function Home() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [msg, setMsg] = useState("");
   const [transfer, setTransfer] = useState<Transfer | null>(null);
+  // Whether visitors bring their own Nuvion key (src/lib/byo.ts), and whether this one has.
+  const [key, setKey] = useState<{ byo: boolean; connected: boolean } | null>(
+    null,
+  );
+  const byo = key?.byo;
+
+  useEffect(() => {
+    fetch("/api/key")
+      .then((r) => r.json())
+      .then(setKey);
+  }, []);
 
   useEffect(() => {
     if (!org) return;
@@ -35,9 +46,13 @@ function Home() {
       const r = await authClient.nuvion.payments.list({
         query: { organizationId: org.id },
       });
-      if (!stopped) {
-        setPayments((r.data as { payments: Payment[] } | null)?.payments ?? []);
-      }
+      const list = (r.data as { payments: Payment[] } | null)?.payments ?? [];
+      if (!stopped) setPayments(list);
+      // A visitor's own key has no webhook, so ask Nuvion about each pending payment instead of waiting for one.
+      if (byo)
+        for (const p of list)
+          if (p.status === "pending")
+            void authClient.nuvion.payments.refresh({ paymentId: p.id });
     };
     load();
     const t = setInterval(load, 4000);
@@ -45,7 +60,7 @@ function Home() {
       stopped = true;
       clearInterval(t);
     };
-  }, [org]);
+  }, [org, byo]);
 
   if (session.isPending) return null;
   const say = (r: { error?: { message?: string } | null }, ok: string) =>
@@ -85,12 +100,65 @@ function Home() {
     );
   }
 
+  if (key?.byo && !key.connected) {
+    return (
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const r = await fetch("/api/key", {
+            method: "POST",
+            body: JSON.stringify({
+              apiKey: new FormData(e.currentTarget).get("apiKey"),
+            }),
+          });
+          const body = await r.json();
+          if (r.ok) setKey({ byo: true, connected: true });
+          else setMsg(body.error);
+        }}
+      >
+        <h1>Add your Nuvion sandbox key</h1>
+        <p>
+          This demo uses your own Nuvion sandbox, never mine. In the{" "}
+          <a href="https://app.nuvion.dev/dashboard/settings">
+            sandbox dashboard
+          </a>
+          , create an API key with the <b>Operations</b> role. It must be a
+          sandbox key, and an Owner or Admin key is refused: it can do more than
+          this demo needs.
+        </p>
+        <p>
+          The key stays in a sealed cookie in this browser for eight hours. The
+          server does not store it, and you can remove it any time.
+        </p>
+        <p>
+          <input name="apiKey" type="password" placeholder="nv_..." required />{" "}
+          <button>Use this key</button>
+        </p>
+        <p>{msg}</p>
+      </form>
+    );
+  }
+
   return (
     <>
       <h1>Take a payment</h1>
       <p>
         Signed in as {session.data.user.email} ·{" "}
         <button onClick={() => authClient.signOut()}>Sign out</button>
+        {byo && (
+          <>
+            {" "}
+            ·{" "}
+            <button
+              onClick={async () => {
+                await fetch("/api/key", { method: "DELETE" });
+                setKey({ byo: true, connected: false });
+              }}
+            >
+              Remove my key
+            </button>
+          </>
+        )}
       </p>
 
       {!org ? (

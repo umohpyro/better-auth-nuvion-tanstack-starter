@@ -6,15 +6,16 @@ For splits across a platform, resellers and merchants, fee rules and refunds, se
 
 ## What it shows
 
-| File                            | What                                                                                                                                                                  |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/lib/plugins.ts`            | The three plugins: `organization()`, `apiKey()`, `nuvion({...})`                                                                                                      |
-| `src/lib/auth.ts`               | Better Auth with those plugins, and `tanstackStartCookies()` as the last one                                                                                          |
-| `src/routes/api/auth/$.ts`      | A server route that mounts the Better Auth handler. The Nuvion webhook receiver is under it: `/api/auth/nuvion/webhook`                                               |
-| `src/lib/checkout.functions.ts` | Server functions that create a checkout payment or a bank transfer with `auth.api.createPayment`, so the key stays on the server                                      |
-| `src/lib/auth-client.ts`        | `nuvionClient()` for typed client calls                                                                                                                               |
-| `src/routes/index.tsx`          | Sign in, connect an entity and account (`nuvion.organization.bind`), pay by hosted checkout or by bank transfer (the server functions), list (`nuvion.payments.list`) |
-| `scripts/migrate.mts`           | Creates the tables with the app's own Better Auth                                                                                                                     |
+| File                                      | What                                                                                                                                                                  |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/plugins.ts`                      | The three plugins: `organization()`, `apiKey()`, `nuvion({...})`                                                                                                      |
+| `src/lib/auth.ts`                         | Better Auth with those plugins, and `tanstackStartCookies()` as the last one                                                                                          |
+| `src/routes/api/auth/$.ts`                | A server route that mounts the Better Auth handler. The Nuvion webhook receiver is under it: `/api/auth/nuvion/webhook`                                               |
+| `src/lib/checkout.functions.ts`           | Server functions that create a checkout payment or a bank transfer with `auth.api.createPayment`, so the key stays on the server                                      |
+| `src/lib/auth-client.ts`                  | `nuvionClient()` for typed client calls                                                                                                                               |
+| `src/routes/index.tsx`                    | Sign in, connect an entity and account (`nuvion.organization.bind`), pay by hosted checkout or by bank transfer (the server functions), list (`nuvion.payments.list`) |
+| `src/lib/byo.ts`, `src/routes/api/key.ts` | Optional, for a hosted demo: each visitor brings their own sandbox key (see below). Delete them if you run it with your own key                                       |
+| `scripts/migrate.mts`                     | Creates the tables with the app's own Better Auth                                                                                                                     |
 
 ## Run it
 
@@ -37,6 +38,17 @@ Using pnpm, yarn or bun? Swap `npm install` for `pnpm install`, `yarn` or `bun i
 Two things to know about bank transfers. The **amount can be a few minor units above the price** (£1.01 for £1.00) when another transfer for the same amount is still open, because a bank that drops the reference is matched by its exact amount. And the **payer's name** (as their bank shows it) is what stops two customers who send the same amount from being mixed up. The page keeps the details only until you reload it; your own app would show them from the order. Read [Accept bank transfers](https://docs.better-auth-nuvion.umoh.name.ng/docs/guides/bank-transfer) before you use it for real.
 
 With one organization there is nobody to split with, so the payment settles without legs. Add a parent organization (see the full example) to split it.
+
+## Hosting it as a demo
+
+Leave `NUVION_API_KEY` unset and the app asks each visitor for **their own** Nuvion sandbox key, so your key is never on the server. It tells them which key to make: a **sandbox** key with the **Operations** role. Owner and Admin keys are refused (they can do more than this needs), and so are Developer keys (read-only) and anything the sandbox does not accept.
+
+- The key is sealed with AES-GCM (using `BETTER_AUTH_SECRET`) in an `httpOnly` cookie in the visitor's browser for eight hours. The server does not store it, and **Remove my key** deletes the cookie.
+- The plugin's calls to Nuvion go through its `fetch` option, which adds the visitor's key and only ever talks to the sandbox host. The server functions and the auth route both run inside `withVisitorKey`, which reads the cookie.
+- A visitor's own key has no webhook pointing at your app, so while a payment is `pending` the page asks Nuvion about it every few seconds (`nuvion.payments.refresh`) instead of waiting for one. The ids prefilled by `VITE_DEMO_*` are not needed: each visitor enters their own entity and account.
+- It only works against the sandbox (`NUVION_BASE_URL=https://api.nuvion.dev`).
+
+With `NUVION_API_KEY` set, none of this runs.
 
 ## Going live
 

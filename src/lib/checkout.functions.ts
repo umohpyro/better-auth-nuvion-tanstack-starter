@@ -17,3 +17,30 @@ export const startCheckout = createServerFn({ method: "POST" })
     });
     return { checkoutUrl: payment.checkoutUrl };
   });
+
+// The same for a bank transfer: there is no checkout page, so the page gets back where to send the money.
+// The key is fresh per request here; a real app would use its order id so a retry returns the same payment.
+export const startBankTransfer = createServerFn({ method: "POST" })
+  .validator(
+    (d: {
+      organizationId: string;
+      amountMinor: number;
+      currency: string;
+      payerName: string;
+    }) => d,
+  )
+  .handler(async ({ data }) => {
+    const payment = await auth.api.createPayment({
+      headers: getRequestHeaders(),
+      body: {
+        ...data,
+        method: "bank-transfer",
+        idempotencyKey: crypto.randomUUID(),
+      },
+    });
+    return {
+      paymentId: payment.paymentId,
+      chargedMinor: payment.chargedMinor,
+      details: payment.transferDetails,
+    };
+  });

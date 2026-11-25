@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { authClient } from "../lib/auth-client";
-import { startCheckout } from "../lib/checkout.functions";
+import { startBankTransfer, startCheckout } from "../lib/checkout.functions";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -13,7 +13,12 @@ type Payment = {
   currency: string;
   legs: Leg[];
 };
-const gbp = (minor: number) => `£${(minor / 100).toFixed(2)}`;
+// What a bank transfer payer needs: where to send it and what to write on it.
+type Transfer = Awaited<ReturnType<typeof startBankTransfer>>;
+const money = (minor: number, currency = "GBP") =>
+  new Intl.NumberFormat("en", { style: "currency", currency }).format(
+    minor / 100,
+  );
 
 function Home() {
   const session = authClient.useSession();
@@ -21,6 +26,7 @@ function Home() {
   const org = orgs.data?.[0];
   const [payments, setPayments] = useState<Payment[]>([]);
   const [msg, setMsg] = useState("");
+  const [transfer, setTransfer] = useState<Transfer | null>(null);
 
   useEffect(() => {
     if (!org) return;
@@ -143,6 +149,93 @@ function Home() {
           >
             Pay £1.00 with Nuvion checkout
           </button>
+
+          <h3>Or pay by bank transfer</h3>
+          <p>
+            No checkout page: the payer sends the money from their own bank, and
+            the payment settles when Nuvion confirms the deposit. This is how
+            you collect NGN.
+          </p>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              try {
+                setTransfer(
+                  await startBankTransfer({
+                    data: {
+                      organizationId: org.id,
+                      amountMinor: Math.round(Number(f.get("amount")) * 100),
+                      currency: String(f.get("currency")).toUpperCase(),
+                      payerName: String(f.get("payer")), // as their bank shows it
+                    },
+                  }),
+                );
+              } catch (err) {
+                setMsg(
+                  err instanceof Error ? err.message : "Something went wrong",
+                );
+              }
+            }}
+          >
+            <input
+              name="amount"
+              type="number"
+              step="0.01"
+              min="1"
+              defaultValue="1"
+              required
+            />{" "}
+            <input name="currency" defaultValue="GBP" size={4} required />{" "}
+            <input
+              name="payer"
+              placeholder="your name, as your bank shows it"
+              required
+            />{" "}
+            <button>Show transfer details</button>
+          </form>
+          {transfer?.details &&
+            ["pending", undefined].includes(
+              payments.find((p) => p.id === transfer.paymentId)?.status,
+            ) && (
+              <>
+                <p>
+                  Send exactly{" "}
+                  <b>
+                    {money(transfer.chargedMinor, transfer.details.currency)}
+                  </b>{" "}
+                  to:
+                </p>
+                <ul>
+                  <li>
+                    {transfer.details.beneficiaryName}
+                    {transfer.details.bankName
+                      ? `, ${transfer.details.bankName}`
+                      : ""}
+                  </li>
+                  <li>
+                    {[
+                      transfer.details.accountNumber,
+                      transfer.details.sortCode &&
+                        `sort code ${transfer.details.sortCode}`,
+                      transfer.details.iban && `IBAN ${transfer.details.iban}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </li>
+                  <li>
+                    reference <b>{transfer.details.reference}</b>
+                  </li>
+                </ul>
+                <p>
+                  Write the reference on the transfer, and send the exact
+                  amount: the plugin matches a deposit by the reference, or by
+                  the amount when the bank drops it. This page updates when it
+                  arrives.
+                </p>
+              </>
+            )}
+
           <h2>Payments</h2>
           {payments.length === 0 ? (
             <p>None yet.</p>
@@ -150,9 +243,9 @@ function Home() {
             <ul>
               {payments.map((p) => (
                 <li key={p.id}>
-                  <b>{gbp(p.chargedMinor)}</b> {p.status}
+                  <b>{money(p.chargedMinor, p.currency)}</b> {p.status}
                   {p.legs.length
-                    ? ` · ${p.legs.map((l) => `${l.kind} ${gbp(l.amountMinor)} ${l.state}`).join(", ")}`
+                    ? ` · ${p.legs.map((l) => `${l.kind} ${money(l.amountMinor, p.currency)} ${l.state}`).join(", ")}`
                     : ""}
                 </li>
               ))}

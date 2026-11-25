@@ -3,8 +3,15 @@ import { nuvion } from "@umohpyro/better-auth-nuvion";
 import { organization } from "better-auth/plugins";
 
 // One list for the app and the migration script, so the tables always match.
-export const plugins = (secrets: { apiKey: string; webhookSecret: string }) => [
+export const plugins = (
+  secrets: { apiKey: string; webhookSecret: string },
+  fetchImpl?: typeof fetch,
+) => [
   organization(),
   apiKey(),
-  nuvion({ ...secrets, baseUrl: process.env.NUVION_BASE_URL }),
+  nuvion({
+    ...secrets,
+    baseUrl: process.env.NUVION_BASE_URL,
+    fetch: fetchImpl,
+  }),
 ];

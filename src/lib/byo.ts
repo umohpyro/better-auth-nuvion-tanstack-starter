@@ -9,12 +9,33 @@ export const byo = !process.env.NUVION_API_KEY;
 export const COOKIE = "nv_key";
 
 const secret = () => process.env.BETTER_AUTH_SECRET ?? "local-dev-only-secret";
+// The sealing key is derived from BETTER_AUTH_SECRET with HKDF and a label of its own, so the secret itself is never used as a key.
+// Without a secret a visitor's cookie could be forged or read, so outside development sealing refuses to run (checked when a cookie
+// is sealed or opened, not when the module loads, so a build without the variable still works).
+const sealingSecret = () => {
+  const s = process.env.BETTER_AUTH_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production")
+    throw new Error("BETTER_AUTH_SECRET is not set");
+  return "local-dev-only-secret";
+};
 const enc = new TextEncoder();
 const aesKey = async () =>
-  crypto.subtle.importKey(
-    "raw",
-    await crypto.subtle.digest("SHA-256", enc.encode(secret())),
-    "AES-GCM",
+  crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: enc.encode("better-auth-nuvion-starter/visitor-key-cookie/v1"),
+    },
+    await crypto.subtle.importKey(
+      "raw",
+      enc.encode(sealingSecret()),
+      "HKDF",
+      false,
+      ["deriveKey"],
+    ),
+    { name: "AES-GCM", length: 256 },
     false,
     ["encrypt", "decrypt"],
   );
